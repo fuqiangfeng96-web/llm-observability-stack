@@ -1,0 +1,90 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: llm-vllm-alerts
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: llm-gpu-alerts
+      interval: 30s
+      rules:
+        - alert: GPUUtilizationHigh
+          expr: DCGM_FI_DEV_GPU_UTIL > 95
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "GPU 利用率过高"
+            description: "GPU {{ $labels.instance }} 利用率持续 5 分钟超过 95%"
+        - alert: GPUUtilizationWarning
+          expr: DCGM_FI_DEV_GPU_UTIL > 85
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "GPU 利用率偏高"
+            description: "GPU {{ $labels.instance }} 利用率超过 85%"
+        - alert: GPUMemoryUsageHigh
+          expr: (DCGM_FI_DEV_FB_USED / (DCGM_FI_DEV_FB_USED + DCGM_FI_DEV_FB_FREE)) * 100 > 90
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "GPU 显存使用率过高"
+            description: "GPU {{ $labels.instance }} 显存使用率超过 90%"
+        - alert: GPUTemperatureHigh
+          expr: DCGM_FI_DEV_GPU_TEMP > 80
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "GPU 温度过高"
+            description: "GPU {{ $labels.instance }} 温度超过 80°C"
+    - name: llm-vllm-alerts
+      interval: 30s
+      rules:
+        - alert: vLLMHighRequestLatency
+          expr: histogram_quantile(0.99, rate(vllm:e2e_request_latency_seconds_bucket[5m])) > 10
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "vLLM 请求延迟过高"
+            description: "P99 延迟超过 10 秒"
+        - alert: vLLMRequestQueueLong
+          expr: vllm:num_requests_waiting > 10
+          for: 3m
+          labels:
+            severity: warning
+          annotations:
+            summary: "vLLM 请求队列过长"
+            description: "等待队列中有 {{ $value }} 个请求"
+    - name: llm-host-alerts
+      interval: 30s
+      rules:
+        - alert: HighCPUUsage
+          expr: (1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m]))) * 100 > 90
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "CPU 使用率过高"
+            description: "主机 CPU 使用率超过 90%"
+        - alert: HighMemoryUsage
+          expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "内存使用率过高"
+            description: "主机内存使用率超过 90%"
+        - alert: DiskSpaceLow
+          expr: (1 - (node_filesystem_avail_bytes / node_filesystem_size_bytes)) * 100 > 85
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "磁盘空间不足"
+            description: "磁盘使用率超过 85%"
